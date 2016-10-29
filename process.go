@@ -8,11 +8,6 @@ import (
 	"syscall"
 )
 
-var (
-	workRoot     = "/var/run/tinyjail"
-	workRootLock = filepath.Join(workRoot, "file.lock")
-)
-
 func mkdirIfNotExist(name string) error {
 	if _, err := os.Lstat(name); err != nil {
 		if !os.IsNotExist(err) {
@@ -93,30 +88,32 @@ func (p *initProcess) Exec(c *Container) error {
 // master process
 type masterProcess struct {
 	base
+	opt Options
 }
 
 func (p *masterProcess) Start(c *Container) error {
-	if err := options.Init(); err != nil {
+	if err := p.opt.Parse(); err != nil {
 		return err
 	}
 
 	// Mkdir /var/run/tinyjail.
-	if err := mkdirIfNotExist(workRoot); err != nil {
+	if err := mkdirIfNotExist(p.opt.workDir); err != nil {
 		return err
 	}
 
-	c.Name = options.name
-	c.Rootfs = options.root
+	c.Name = p.opt.name
+	c.Rootfs = p.opt.root
+	c.Dir = filepath.Join(p.opt.workDir, p.opt.name)
 
-	cmd, err := options.ParseRunCmd()
+	arg0, args, err := p.opt.ParseCmd(p.opt.runCmd)
 	if err != nil {
 		return err
 	}
-	c.Path = cmd.Path
-	c.Argv = cmd.Args
+	c.Path = arg0
+	c.Argv = args
 
 	// Mkdir container's dir.
-	if err := mkdirIfNotExist(c.Dir()); err != nil {
+	if err := mkdirIfNotExist(c.Dir); err != nil {
 		return err
 	}
 
@@ -132,7 +129,7 @@ func (p *masterProcess) Start(c *Container) error {
 	p.cmd = &exec.Cmd{
 		Dir:         c.Rootfs,
 		Path:        "/proc/self/exe",
-		Args:        []string{"init", c.Name},
+		Args:        []string{"init", c.Dir},
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
 		Stdin:       os.Stdin,

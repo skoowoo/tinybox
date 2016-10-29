@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"syscall"
+	"time"
 )
 
 type process interface {
@@ -31,11 +31,14 @@ type rootfsOper interface {
 
 type Container struct {
 	Rootfs   string        `json:"rootfs"`
-	Path     string        `json:"path"`
+	Path     string        `json:"path"` // the binary path of the first process.
 	Argv     []string      `json:"argv"`
-	Pid      int           `json:"pid"`
-	Name     string        `json:"name"`
+	Pid      int           `json:"pid"`  // process id of the init process
+	Name     string        `json:"name"` // container's name
 	Hostname string        `json:"hostname"`
+	Running  bool          `json:"running"`
+	Uptime   time.Time     `json:"uptime"`
+	Dir      string        `json:"dir"`
 	nsop     namespaceOper `json:"-"`
 	cgop     cgroupOper    `json:"-"`
 	fsop     rootfsOper    `json:"-"`
@@ -49,6 +52,7 @@ func NewContainer() *Container {
 	c.fsop = &rootFs{}
 	c.master = &masterProcess{}
 	c.init = &initProcess{}
+
 	return c
 }
 
@@ -86,14 +90,9 @@ func (c *Container) readPipe() error {
 	return json.NewDecoder(pipe).Decode(c)
 }
 
-// Dir return container's root dir, not rootfs.
-func (c *Container) Dir() string {
-	return path.Join(workRoot, c.Name)
-}
-
 // PipeFile return container's pipe file path.
 func (c *Container) PipeFile() string {
-	return filepath.Join(c.Dir(), "pipe")
+	return filepath.Join(c.Dir, "pipe")
 }
 
 // Sethostname set container's hostname.

@@ -3,8 +3,7 @@ package tinyjail
 import (
 	"flag"
 	"fmt"
-	"os"
-	"os/exec"
+	"log"
 	"path"
 	"strings"
 )
@@ -12,33 +11,28 @@ import (
 // tinyjail --run='' --name='' --root=''
 // tinyjail --exe='' --name=''
 
-var options Options
-
-func init() {
-	flag.StringVar(&options.runCmd, "run", "", "Container run command")
-	flag.StringVar(&options.exeCmd, "exe", "", "Container exe command")
-	flag.StringVar(&options.root, "root", "", "Container rootfs path")
-	flag.StringVar(&options.name, "name", "", "Container name")
-}
-
 type Options struct {
 	runCmd  string
 	exeCmd  string
 	name    string
 	root    string
-	working string
+	workDir string
 }
 
-func (o *Options) Init() error {
+func (o *Options) register() {
+	flag.StringVar(&o.runCmd, "run", "", "Container run command")
+	flag.StringVar(&o.exeCmd, "exe", "", "Container exe command")
+	flag.StringVar(&o.root, "root", "", "Container rootfs path")
+	flag.StringVar(&o.name, "name", "", "Container name")
+	flag.StringVar(&o.workDir, "work", "/var/run/tinyjail", "")
+}
+
+func (o *Options) Parse() error {
+	o.register()
 	flag.Parse()
 
 	if o.runCmd == "" && o.runCmd == "" {
 		return fmt.Errorf("Not set command")
-	}
-	if wd, err := os.Getwd(); err != nil {
-		return err
-	} else {
-		o.working = wd
 	}
 	if o.root != "" && !path.IsAbs(o.root) {
 		return fmt.Errorf("Root not absolute path: %s", o.root)
@@ -46,21 +40,20 @@ func (o *Options) Init() error {
 	if o.name == "" {
 		return fmt.Errorf("Not set container's name")
 	}
+
+	if debug {
+		log.Printf("%+v \n", o)
+	}
+
 	return nil
 }
 
-func (o *Options) ParseRunCmd() (*exec.Cmd, error) {
-	if o.runCmd == "" {
-		return nil, CmdError{o.runCmd}
-	}
-	args := strings.Fields(o.runCmd)
+func (o *Options) ParseCmd(cmd string) (string, []string, error) {
+	args := strings.Fields(cmd)
 	if len(args) == 0 {
-		return nil, CmdError{o.runCmd}
+		return "", nil, CmdError{cmd}
 	}
-	return &exec.Cmd{
-		Path: args[0],
-		Args: args,
-	}, nil
+	return args[0], args, nil
 }
 
 type CmdError struct {

@@ -6,12 +6,12 @@ import (
 
 func newNamespace() NamespaceManager {
 	return NamespaceManager{
-		"MNT":  &setNS{syscall.CLONE_NEWNS},
-		"UTS":  &setUTS{syscall.CLONE_NEWUTS},
-		"PID":  &setPID{syscall.CLONE_NEWPID},
-		"NET":  &setNET{syscall.CLONE_NEWNET},
-		"USER": &setUSER{syscall.CLONE_NEWUSER},
-		"IPC":  &setIPC{syscall.CLONE_NEWIPC},
+		"MNT":  &setNS{clone: syscall.CLONE_NEWNS},
+		"UTS":  &setUTS{clone: syscall.CLONE_NEWUTS},
+		"PID":  &setPID{clone: syscall.CLONE_NEWPID},
+		"NET":  &setNET{clone: syscall.CLONE_NEWNET},
+		"USER": &setUSER{clone: syscall.CLONE_NEWUSER},
+		"IPC":  &setIPC{clone: syscall.CLONE_NEWIPC},
 	}
 }
 
@@ -40,13 +40,16 @@ func (m NamespaceManager) Setup(c *Container) error {
 	return nil
 }
 
+type baseN struct{}
+
+func (b baseN) setup(c *Container) error {
+	return nil
+}
+
 // Set mount namespace.
 type setNS struct {
 	clone int
-}
-
-func (s setNS) setup(c *Container) error {
-	return nil
+	baseN
 }
 
 func (s setNS) flag(c *Container) uintptr {
@@ -56,10 +59,7 @@ func (s setNS) flag(c *Container) uintptr {
 // Set uts namespace.
 type setUTS struct {
 	clone int
-}
-
-func (s setUTS) setup(c *Container) error {
-	return nil
+	baseN
 }
 
 func (s setUTS) flag(c *Container) uintptr {
@@ -69,10 +69,7 @@ func (s setUTS) flag(c *Container) uintptr {
 // Set pid namespace.
 type setPID struct {
 	clone int
-}
-
-func (s setPID) setup(c *Container) error {
-	return nil
+	baseN
 }
 
 func (s setPID) flag(c *Container) uintptr {
@@ -82,10 +79,7 @@ func (s setPID) flag(c *Container) uintptr {
 // Set net namespace.
 type setNET struct {
 	clone int
-}
-
-func (s setNET) setup(c *Container) error {
-	return nil
+	baseN
 }
 
 func (s setNET) flag(c *Container) uintptr {
@@ -95,10 +89,7 @@ func (s setNET) flag(c *Container) uintptr {
 // Set user namespace.
 type setUSER struct {
 	clone int
-}
-
-func (s setUSER) setup(c *Container) error {
-	return nil
+	baseN
 }
 
 func (s setUSER) flag(c *Container) uintptr {
@@ -108,10 +99,7 @@ func (s setUSER) flag(c *Container) uintptr {
 // Set ipc namespace.
 type setIPC struct {
 	clone int
-}
-
-func (s setIPC) setup(c *Container) error {
-	return nil
+	baseN
 }
 
 func (s setIPC) flag(c *Container) uintptr {

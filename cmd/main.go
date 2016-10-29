@@ -4,14 +4,14 @@ import (
 	"log"
 	"os"
 
-	"github.com/tinyjail"
+	"github.com/skoo87/tinyjail"
 )
 
 func main() {
 	c := tinyjail.NewContainer()
 
 	if os.Args[0] == "init" {
-		c.Name = os.Args[1]
+		c.Dir = os.Args[1]
 		if err := c.InitExec(); err != nil {
 			log.Fatalln(err)
 		}
