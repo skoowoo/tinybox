@@ -4,8 +4,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 )
 
 func mkdirIfNotExist(name string) error {
@@ -88,7 +92,22 @@ func (p *initProcess) Exec(c *Container) error {
 // master process
 type masterProcess struct {
 	base
-	opt Options
+	opt  Options
+	ec   chan event
+	sigs map[os.Signal]func(os.Signal, chan event)
+	stop int32
+}
+
+func master() *masterProcess {
+	return &masterProcess{
+		ec: make(chan event, 10),
+		sigs: map[os.Signal]func(os.Signal, chan event){
+			syscall.SIGINT:  stopHandle,
+			syscall.SIGTERM: stopHandle,
+			syscall.SIGCHLD: childHandle,
+		},
+		stop: 0,
+	}
 }
 
 func (p *masterProcess) Start(c *Container) error {
@@ -150,5 +169,115 @@ func (p *masterProcess) Start(c *Container) error {
 }
 
 func (p *masterProcess) Wait(c *Container) error {
-	return p.cmd.Wait()
+	var wg sync.WaitGroup
+
+	go func() {
+		wg.Add(1)
+		defer wg.Done()
+
+		p.signals()
+	}()
+
+	go func() {
+		wg.Add(1)
+		defer wg.Done()
+
+		p.events(c)
+	}()
+
+	wg.Wait()
+	p.cmd.Wait()
+
+	return nil
+}
+
+type event struct {
+	sig    os.Signal
+	action string
+}
+
+// signal function.
+func stopHandle(sig os.Signal, c chan event) {
+	if debug {
+		log.Println("handle stop")
+	}
+
+	ev := event{
+		sig:    sig,
+		action: "stop",
+	}
+
+	select {
+	case c <- ev:
+	case <-time.After(time.Second * 5):
+		log.Printf("Send event timeout: %ss \n", 5)
+	}
+}
+
+func childHandle(sig os.Signal, c chan event) {
+	if debug {
+		log.Println("handle child")
+	}
+
+	ev := event{
+		sig:    sig,
+		action: "child",
+	}
+
+	select {
+	case c <- ev:
+	case <-time.After(time.Second * 5):
+		log.Printf("Send event timeout: %ss \n", 5)
+	}
+}
+
+// signals register and handle os's signal, must run it with a goroutine.
+func (p *masterProcess) signals() {
+	var slice []os.Signal
+	for sig, _ := range p.sigs {
+		slice = append(slice, sig)
+	}
+
+	sc := make(chan os.Signal, 10)
+	signal.Ignore(syscall.SIGHUP)
+	signal.Notify(sc, slice...)
+
+	for {
+		select {
+		case sig := <-sc:
+			log.Printf("Trap signal: %s \n", sig)
+
+			if handle, ok := p.sigs[sig]; ok {
+				handle(sig, p.ec)
+			}
+
+		case <-time.After(time.Second * 2):
+		}
+
+		if atomic.LoadInt32(&p.stop) != 0 {
+			return
+		}
+	}
+}
+
+// events handle event, must run it with a goroutine.
+func (p *masterProcess) events(c *Container) {
+	for {
+		ev := <-p.ec
+
+		switch ev.action {
+		case "stop":
+			// Kill the init process, and all processes must be stopped.
+			if err := p.cmd.Process.Kill(); err != nil {
+				log.Printf("Kill init process error: %v \n", err)
+				break
+			}
+
+		case "child":
+			atomic.StoreInt32(&p.stop, 1)
+			return
+
+		default:
+		}
+	}
 }

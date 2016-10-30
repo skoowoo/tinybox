@@ -50,7 +50,7 @@ func NewContainer() *Container {
 	c := new(Container)
 	c.nsop = newNamespace()
 	c.fsop = &rootFs{}
-	c.master = &masterProcess{}
+	c.master = master()
 	c.init = &initProcess{}
 
 	return c
