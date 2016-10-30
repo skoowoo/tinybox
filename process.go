@@ -192,7 +192,7 @@ func (p *masterProcess) Wait(c *Container) error {
 
 	// http sever base on unix domain socket.
 	go func() {
-		if err := ListenAndServe(c.UnixFile()); err != nil {
+		if err := ListenAndServe(c.UnixFile(), p.ec); err != nil {
 			errorln("Http server error: %v", err)
 		}
 	}()
@@ -214,8 +214,8 @@ func (p *masterProcess) cleanup(c *Container) {
 }
 
 type event struct {
-	sig    os.Signal
 	action string
+	c      chan interface{}
 }
 
 // signal function.
@@ -223,7 +223,6 @@ func stopHandle(sig os.Signal, c chan event) {
 	debugln("handle stop")
 
 	ev := event{
-		sig:    sig,
 		action: "stop",
 	}
 
@@ -238,7 +237,6 @@ func childHandle(sig os.Signal, c chan event) {
 	debugln("handle child")
 
 	ev := event{
-		sig:    sig,
 		action: "child",
 	}
 
@@ -296,6 +294,12 @@ func (p *masterProcess) events(c *Container) {
 			return
 
 		default:
+			if ev.c != nil {
+				select {
+				case ev.c <- "hello, world":
+				default:
+				}
+			}
 		}
 	}
 }
