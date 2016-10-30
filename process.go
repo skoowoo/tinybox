@@ -1,7 +1,6 @@
 package tinyjail
 
 import (
-	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -78,12 +77,10 @@ func (p *initProcess) Exec(c *Container) error {
 
 	// Do nothing after Chroot.
 
-	if debug {
-		log.Printf("Container info: %+v \n", c)
-		log.Printf("Container init process: pid=%d \n", os.Getpid())
-		if h, err := os.Hostname(); err == nil {
-			log.Printf("Container hostname: %s \n", h)
-		}
+	debugln("Container info: %+v", c)
+	debugln("Container init process: pid=%d", os.Getpid())
+	if h, err := os.Hostname(); err == nil {
+		debugln("Container hostname: %s", h)
 	}
 
 	return syscall.Exec(c.Path, c.Argv, nil)
@@ -198,9 +195,7 @@ type event struct {
 
 // signal function.
 func stopHandle(sig os.Signal, c chan event) {
-	if debug {
-		log.Println("handle stop")
-	}
+	debugln("handle stop")
 
 	ev := event{
 		sig:    sig,
@@ -210,14 +205,12 @@ func stopHandle(sig os.Signal, c chan event) {
 	select {
 	case c <- ev:
 	case <-time.After(time.Second * 5):
-		log.Printf("Send event timeout: %ss \n", 5)
+		warnln("Send event timeout: %ss", 5)
 	}
 }
 
 func childHandle(sig os.Signal, c chan event) {
-	if debug {
-		log.Println("handle child")
-	}
+	debugln("handle child")
 
 	ev := event{
 		sig:    sig,
@@ -227,7 +220,7 @@ func childHandle(sig os.Signal, c chan event) {
 	select {
 	case c <- ev:
 	case <-time.After(time.Second * 5):
-		log.Printf("Send event timeout: %ss \n", 5)
+		warnln("Send event timeout: %ss", 5)
 	}
 }
 
@@ -245,7 +238,7 @@ func (p *masterProcess) signals() {
 	for {
 		select {
 		case sig := <-sc:
-			log.Printf("Trap signal: %s \n", sig)
+			infoln("Trap signal: %s", sig)
 
 			if handle, ok := p.sigs[sig]; ok {
 				handle(sig, p.ec)
@@ -269,7 +262,7 @@ func (p *masterProcess) events(c *Container) {
 		case "stop":
 			// Kill the init process, and all processes must be stopped.
 			if err := p.cmd.Process.Kill(); err != nil {
-				log.Printf("Kill init process error: %v \n", err)
+				errorln("Kill init process error: %v", err)
 				break
 			}
 

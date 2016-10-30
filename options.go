@@ -3,7 +3,6 @@ package tinyjail
 import (
 	"flag"
 	"fmt"
-	"log"
 	"path"
 	"strings"
 )
@@ -41,9 +40,7 @@ func (o *Options) Parse() error {
 		return fmt.Errorf("Not set container's name")
 	}
 
-	if debug {
-		log.Printf("%+v \n", o)
-	}
+	debugln("%+v", o)
 
 	return nil
 }
