@@ -40,8 +40,6 @@ func (o *Options) Parse() error {
 		return fmt.Errorf("Not set container's name")
 	}
 
-	debugln("%+v", o)
-
 	return nil
 }
 

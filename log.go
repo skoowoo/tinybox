@@ -1,6 +1,7 @@
 package tinyjail
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
@@ -9,6 +10,10 @@ var debug = true
 
 func init() {
 	log.SetOutput(os.Stdout)
+}
+
+func logPrefix(name string) {
+	log.SetPrefix(fmt.Sprintf("Name=%s ", name))
 }
 
 func infoln(format string, v ...interface{}) {

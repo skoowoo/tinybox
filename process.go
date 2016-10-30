@@ -57,6 +57,8 @@ func (p *initProcess) Exec(c *Container) error {
 		return err
 	}
 
+	logPrefix(c.Name)
+
 	// Mount filesystem
 	if err := c.fsop.Mount(c); err != nil {
 		return err
@@ -111,6 +113,8 @@ func (p *masterProcess) Start(c *Container) error {
 	if err := p.opt.Parse(); err != nil {
 		return err
 	}
+
+	logPrefix(p.opt.name)
 
 	// Mkdir /var/run/tinyjail.
 	if err := mkdirIfNotExist(p.opt.workDir); err != nil {
