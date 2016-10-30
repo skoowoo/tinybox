@@ -88,6 +88,10 @@ func (p *initProcess) Exec(c *Container) error {
 	return syscall.Exec(c.Path, c.Argv, nil)
 }
 
+type setnsProcess struct {
+	base
+}
+
 // master process
 type masterProcess struct {
 	base
@@ -186,10 +190,27 @@ func (p *masterProcess) Wait(c *Container) error {
 		p.events(c)
 	}()
 
+	// http sever base on unix domain socket.
+	go func() {
+		if err := ListenAndServe(c.UnixFile()); err != nil {
+			errorln("Http server error: %v", err)
+		}
+	}()
+
 	wg.Wait()
 	p.cmd.Wait()
+	p.cleanup(c)
 
 	return nil
+}
+
+func (p *masterProcess) cleanup(c *Container) {
+	if err := os.Remove(c.UnixFile()); err != nil {
+		errorln("Remove unix socket %s error: %v", err)
+	}
+	if err := os.Remove(c.PipeFile()); err != nil {
+		errorln("Remove pipe %s error: %v", err)
+	}
 }
 
 type event struct {

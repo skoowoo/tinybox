@@ -44,6 +44,7 @@ type Container struct {
 	fsop     rootfsOper    `json:"-"`
 	init     process       `json:"-"`
 	master   process       `json:"-"`
+	setns    process       `json:"-"`
 }
 
 func NewContainer() *Container {
@@ -93,6 +94,10 @@ func (c *Container) readPipe() error {
 // PipeFile return container's pipe file path.
 func (c *Container) PipeFile() string {
 	return filepath.Join(c.Dir, "pipe")
+}
+
+func (c *Container) UnixFile() string {
+	return filepath.Join(c.Dir, "unix.sock")
 }
 
 // Sethostname set container's hostname.
