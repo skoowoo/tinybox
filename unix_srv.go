@@ -8,18 +8,14 @@ import (
 	"time"
 )
 
-func httpRoute(send func(event) error) *http.ServeMux {
+func httpRoute(send func(event) chan interface{}) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/v1/hello", func(w http.ResponseWriter, r *http.Request) {
 		ev := event{
 			action: "hello",
-			c:      make(chan interface{}, 1),
 		}
-		send(ev)
-
-		res := <-ev.c
-
+		res := <-send(ev)
 		json.NewEncoder(w).Encode(res)
 	})
 
@@ -36,13 +32,14 @@ func ListenAndServe(addr string, c chan event) error {
 		return err
 	}
 
-	send := func(e event) error {
+	send := func(e event) chan interface{} {
+		e.c = make(chan interface{}, 1)
 		select {
 		case c <- e:
 		case <-time.After(time.Second * 5):
-			return fmt.Errorf("timeout 5s")
+			e.c <- fmt.Errorf("timeout 5s")
 		}
-		return nil
+		return e.c
 	}
 
 	srv := new(http.Server)
