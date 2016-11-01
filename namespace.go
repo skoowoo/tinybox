@@ -48,8 +48,8 @@ func (b baseN) setup(c *Container) error {
 
 // Set mount namespace.
 type setNS struct {
-	clone int
 	baseN
+	clone int
 }
 
 func (s setNS) flag(c *Container) uintptr {
@@ -58,8 +58,8 @@ func (s setNS) flag(c *Container) uintptr {
 
 // Set uts namespace.
 type setUTS struct {
-	clone int
 	baseN
+	clone int
 }
 
 func (s setUTS) flag(c *Container) uintptr {
@@ -68,8 +68,8 @@ func (s setUTS) flag(c *Container) uintptr {
 
 // Set pid namespace.
 type setPID struct {
-	clone int
 	baseN
+	clone int
 }
 
 func (s setPID) flag(c *Container) uintptr {
@@ -78,8 +78,8 @@ func (s setPID) flag(c *Container) uintptr {
 
 // Set net namespace.
 type setNET struct {
-	clone int
 	baseN
+	clone int
 }
 
 func (s setNET) flag(c *Container) uintptr {
@@ -88,8 +88,8 @@ func (s setNET) flag(c *Container) uintptr {
 
 // Set user namespace.
 type setUSER struct {
-	clone int
 	baseN
+	clone int
 }
 
 func (s setUSER) flag(c *Container) uintptr {
@@ -98,8 +98,8 @@ func (s setUSER) flag(c *Container) uintptr {
 
 // Set ipc namespace.
 type setIPC struct {
-	clone int
 	baseN
+	clone int
 }
 
 func (s setIPC) flag(c *Container) uintptr {

@@ -52,6 +52,7 @@ func NewContainer() *Container {
 	c.nsop = newNamespace()
 	c.fsop = &rootFs{}
 	c.master = master()
+	c.setns = setns()
 	c.init = &initProcess{}
 
 	return c
@@ -67,6 +68,10 @@ func (c *Container) MasterWait() error {
 
 func (c *Container) InitExec() error {
 	return c.init.Exec(c)
+}
+
+func (c *Container) SetnsStart() error {
+	return c.setns.Start(c)
 }
 
 // writePipe write the json of Container into pipe

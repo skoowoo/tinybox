@@ -1,6 +1,8 @@
 package tinyjail
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -9,6 +11,14 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/skoo87/tinyjail/proto"
+)
+
+const (
+	evStop  = "stop"
+	evChild = "child"
+	evExec  = "exec"
 )
 
 func mkdirIfNotExist(name string) error {
@@ -46,6 +56,31 @@ func (p *base) Pid() int {
 	return 0
 }
 
+// setns process
+type setnsProcess struct {
+	base
+}
+
+func setns() *setnsProcess {
+	return new(setnsProcess)
+}
+
+func (p *setnsProcess) Start(c *Container) error {
+	cmd := os.Getenv("__TINYJAIL_CMD__")
+	if cmd == "" {
+		return nil
+	}
+
+	debugln("setns command: %s", cmd)
+
+	var er proto.ExecRequest
+	if err := json.Unmarshal([]byte(cmd), &er); err != nil {
+		return err
+	}
+
+	return syscall.Exec(er.Path, er.Argv, nil)
+}
+
 // init process
 type initProcess struct {
 	base
@@ -62,12 +97,6 @@ func (p *initProcess) Exec(c *Container) error {
 	// Mount filesystem
 	if err := c.fsop.Mount(c); err != nil {
 		return err
-	}
-
-	if c.Hostname != "" {
-		if err := c.sethostname(); err != nil {
-			return err
-		}
 	}
 
 	// Chroot, if have root path.
@@ -88,17 +117,15 @@ func (p *initProcess) Exec(c *Container) error {
 	return syscall.Exec(c.Path, c.Argv, nil)
 }
 
-type setnsProcess struct {
-	base
-}
-
 // master process
 type masterProcess struct {
 	base
-	opt  Options
-	ec   chan event
-	sigs map[os.Signal]func(os.Signal, chan event)
-	stop int32
+	opt    Options
+	ec     chan event
+	sigs   map[os.Signal]func(os.Signal, chan event)
+	stop   chan struct{}
+	childs int32
+	wg     sync.WaitGroup
 }
 
 func master() *masterProcess {
@@ -109,7 +136,8 @@ func master() *masterProcess {
 			syscall.SIGTERM: stopHandle,
 			syscall.SIGCHLD: childHandle,
 		},
-		stop: 0,
+		stop:   make(chan struct{}),
+		childs: 0,
 	}
 }
 
@@ -119,6 +147,28 @@ func (p *masterProcess) Start(c *Container) error {
 	}
 
 	logPrefix(p.opt.name)
+
+	go func() {
+		p.wg.Add(1)
+		defer p.wg.Done()
+
+		p.signals()
+	}()
+
+	go func() {
+		p.wg.Add(1)
+		defer p.wg.Done()
+
+		p.events(c)
+	}()
+
+	// http sever base on unix domain socket.
+	go func() {
+		if err := ListenAndServe(c.UnixFile(), p.ec); err != nil {
+			errorln("Http server error: %v", err)
+			os.Exit(1)
+		}
+	}()
 
 	// Mkdir /var/run/tinyjail.
 	if err := mkdirIfNotExist(p.opt.workDir); err != nil {
@@ -164,6 +214,7 @@ func (p *masterProcess) Start(c *Container) error {
 	if err := p.cmd.Start(); err != nil {
 		return err
 	}
+	p.incrChild()
 
 	// Save container pid.
 	c.Pid = p.Pid()
@@ -174,31 +225,7 @@ func (p *masterProcess) Start(c *Container) error {
 }
 
 func (p *masterProcess) Wait(c *Container) error {
-	var wg sync.WaitGroup
-
-	go func() {
-		wg.Add(1)
-		defer wg.Done()
-
-		p.signals()
-	}()
-
-	go func() {
-		wg.Add(1)
-		defer wg.Done()
-
-		p.events(c)
-	}()
-
-	// http sever base on unix domain socket.
-	go func() {
-		if err := ListenAndServe(c.UnixFile(), p.ec); err != nil {
-			errorln("Http server error: %v", err)
-		}
-	}()
-
-	wg.Wait()
-	p.cmd.Wait()
+	p.wg.Wait()
 	p.cleanup(c)
 
 	return nil
@@ -213,8 +240,13 @@ func (p *masterProcess) cleanup(c *Container) {
 	}
 }
 
+func (p *masterProcess) incrChild() {
+	atomic.AddInt32(&p.childs, 1)
+}
+
 type event struct {
 	action string
+	data   interface{}
 	c      chan interface{}
 }
 
@@ -223,7 +255,7 @@ func stopHandle(sig os.Signal, c chan event) {
 	debugln("handle stop")
 
 	ev := event{
-		action: "stop",
+		action: evStop,
 	}
 
 	select {
@@ -237,7 +269,7 @@ func childHandle(sig os.Signal, c chan event) {
 	debugln("handle child")
 
 	ev := event{
-		action: "child",
+		action: evChild,
 	}
 
 	select {
@@ -267,10 +299,7 @@ func (p *masterProcess) signals() {
 				handle(sig, p.ec)
 			}
 
-		case <-time.After(time.Second * 2):
-		}
-
-		if atomic.LoadInt32(&p.stop) != 0 {
+		case <-p.stop:
 			return
 		}
 	}
@@ -278,20 +307,83 @@ func (p *masterProcess) signals() {
 
 // events handle event, must run it with a goroutine.
 func (p *masterProcess) events(c *Container) {
+	var ev event
 	for {
-		ev := <-p.ec
+		select {
+		case ev = <-p.ec:
+		case <-p.stop:
+			return
+		}
+
+		debugln("Receive event: %s", ev.action)
 
 		switch ev.action {
-		case "stop":
+		case evStop:
 			// Kill the init process, and all processes must be stopped.
-			if err := p.cmd.Process.Kill(); err != nil {
-				errorln("Kill init process error: %v", err)
-				break
+			//if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			//	errorln("Kill init process error: %v", err)
+			//}
+			syscall.Kill(c.Pid, syscall.SIGKILL)
+			p.cmd.Wait()
+
+		case evChild:
+			if atomic.AddInt32(&p.childs, -1) == 0 {
+				close(p.stop)
 			}
 
-		case "child":
-			atomic.StoreInt32(&p.stop, 1)
-			return
+		case evExec:
+			er := ev.data.(*proto.ExecRequest)
+			command, err := json.Marshal(er)
+			if err != nil {
+				errorln("Encode exec error: %v", err)
+			}
+
+			execFn := func() error {
+				cmd := &exec.Cmd{
+					Dir:    "/tmp",
+					Path:   "/proc/self/exe",
+					Args:   []string{"setns"},
+					Stdout: os.Stdout,
+					Stderr: os.Stderr,
+				}
+				// 通过环境变量给 setns 进程传递数据.
+				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYJAIL_INIT_PID__=%d", c.Pid))
+				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYJAIL_CMD__=%s", string(command)))
+
+				if err := cmd.Start(); err != nil {
+					return fmt.Errorf("Start setns process error: %v", err)
+				}
+				p.incrChild()
+				p.incrChild()
+
+				status, err := cmd.Process.Wait()
+				if err != nil {
+					cmd.Wait()
+					return fmt.Errorf("Process wait error: %v", err)
+				}
+				ws := status.Sys().(syscall.WaitStatus)
+				if ws.ExitStatus() == 1 {
+					cmd.Wait()
+					return fmt.Errorf("Setns process failed")
+				}
+
+				// pid 通过 exit code 返回.
+				pid := ws.ExitStatus()
+
+				process, err := os.FindProcess(pid)
+				if err != nil {
+					return fmt.Errorf("Find process error: %v, pid = %d", err, pid)
+				}
+				cmd.Process = process
+				cmd.Wait()
+
+				ev.c <- "test"
+				return nil
+			}
+
+			if err := execFn(); err != nil {
+				errorln("%v", err)
+			}
 
 		default:
 			if ev.c != nil {

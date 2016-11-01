@@ -10,6 +10,7 @@ var debug = true
 
 func init() {
 	log.SetOutput(os.Stdout)
+	log.SetFlags(log.Lshortfile)
 }
 
 func logPrefix(name string) {
