@@ -1,4 +1,4 @@
-package tinyjail
+package tinybox
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skoo87/tinyjail/proto"
+	"github.com/skoo87/tinybox/proto"
 )
 
 const (
@@ -66,7 +66,7 @@ func setns() *setnsProcess {
 }
 
 func (p *setnsProcess) Start(c *Container) error {
-	cmd := os.Getenv("__TINYJAIL_CMD__")
+	cmd := os.Getenv("__TINYBOX_CMD__")
 	if cmd == "" {
 		return nil
 	}
@@ -170,7 +170,7 @@ func (p *masterProcess) Start(c *Container) error {
 		}
 	}()
 
-	// Mkdir /var/run/tinyjail.
+	// Mkdir /var/run/tinybox.
 	if err := mkdirIfNotExist(p.opt.workDir); err != nil {
 		return err
 	}
@@ -347,8 +347,8 @@ func (p *masterProcess) events(c *Container) {
 					Stderr: os.Stderr,
 				}
 				// 通过环境变量给 setns 进程传递数据.
-				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYJAIL_INIT_PID__=%d", c.Pid))
-				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYJAIL_CMD__=%s", string(command)))
+				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_INIT_PID__=%d", c.Pid))
+				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_CMD__=%s", string(command)))
 
 				if err := cmd.Start(); err != nil {
 					return fmt.Errorf("Start setns process error: %v", err)

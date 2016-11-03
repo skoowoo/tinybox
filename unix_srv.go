@@ -1,4 +1,4 @@
-package tinyjail
+package tinybox
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skoo87/tinyjail/proto"
+	"github.com/skoo87/tinybox/proto"
 )
 
 func httpRoute(send func(event) chan interface{}) *http.ServeMux {

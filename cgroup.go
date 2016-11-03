@@ -1,4 +1,4 @@
-package tinyjail
+package tinybox
 
 var DefaultCG = CGroup{}
 

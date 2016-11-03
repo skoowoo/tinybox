@@ -5,12 +5,12 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/skoo87/tinyjail"
-	_ "github.com/skoo87/tinyjail/nsenter"
+	"github.com/skoo87/tinybox"
+	_ "github.com/skoo87/tinybox/nsenter"
 )
 
 func main() {
-	c := tinyjail.NewContainer()
+	c := tinybox.NewContainer()
 
 	// init child process
 	if os.Args[0] == "init" {

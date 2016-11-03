@@ -1,4 +1,4 @@
-package tinyjail
+package tinybox
 
 import (
 	"flag"
@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// tinyjail --run='' --name='' --root=''
-// tinyjail --exe='' --name=''
+// tinybox --run='' --name='' --root=''
+// tinybox --exe='' --name=''
 
 type Options struct {
 	runCmd  string
@@ -23,7 +23,7 @@ func (o *Options) register() {
 	flag.StringVar(&o.exeCmd, "exe", "", "Container exe command")
 	flag.StringVar(&o.root, "root", "", "Container rootfs path")
 	flag.StringVar(&o.name, "name", "", "Container name")
-	flag.StringVar(&o.workDir, "work", "/var/run/tinyjail", "")
+	flag.StringVar(&o.workDir, "work", "/var/run/tinybox", "")
 }
 
 func (o *Options) Parse() error {

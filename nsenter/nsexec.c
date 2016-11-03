@@ -74,7 +74,7 @@ void nsexec()
 	jmp_buf env;
 	const int num = sizeof(namespaces) / sizeof(char *);
 
-	if ((val = getenv("__TINYJAIL_INIT_PID__")) == NULL) {
+	if ((val = getenv("__TINYBOX_INIT_PID__")) == NULL) {
 		return;
     }
 
