@@ -8,10 +8,10 @@ import (
 	"os/exec"
 	"os/signal"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/skoo87/tinybox/pipe"
 	"github.com/skoo87/tinybox/proto"
 )
 
@@ -23,12 +23,11 @@ const (
 
 type masterProcess struct {
 	base
-	opt    Options
-	ec     chan event
-	sigs   map[os.Signal]func(os.Signal, chan event)
-	stop   chan struct{}
-	childs int32
-	wg     sync.WaitGroup
+	opt  Options
+	ec   chan event
+	sigs map[os.Signal]func(os.Signal, chan event)
+	stop chan struct{}
+	wg   sync.WaitGroup
 }
 
 func master() *masterProcess {
@@ -37,10 +36,8 @@ func master() *masterProcess {
 		sigs: map[os.Signal]func(os.Signal, chan event){
 			syscall.SIGINT:  stopHandle,
 			syscall.SIGTERM: stopHandle,
-			syscall.SIGCHLD: childHandle,
 		},
-		stop:   make(chan struct{}),
-		childs: 0,
+		stop: make(chan struct{}),
 	}
 }
 
@@ -50,6 +47,7 @@ func (p *masterProcess) Start(c *Container) error {
 		defer p.wg.Done()
 
 		p.signals()
+		log.Println("Signal loop exited")
 	}()
 
 	go func() {
@@ -57,24 +55,19 @@ func (p *masterProcess) Start(c *Container) error {
 		defer p.wg.Done()
 
 		p.events(c)
+		log.Println("Event loop exited")
 	}()
 
 	// http sever base on unix domain socket.
+	ls := make(chan struct{})
 	go func() {
-		if err := ListenAndServe(c.UnixFile(), p.ec); err != nil {
+		if err := ListenAndServe(c.UnixFile(), p.ec, ls); err != nil {
 			log.Printf("Http server error: %v \n", err)
 			os.Exit(1)
 		}
 	}()
 
-	// Create named pipe.
-	if _, err := os.Lstat(c.PipeFile()); err != nil {
-		if os.IsNotExist(err) {
-			if err := syscall.Mkfifo(c.PipeFile(), 0); err != nil {
-				return err
-			}
-		}
-	}
+	<-ls
 
 	p.cmd = &exec.Cmd{
 		Dir:         c.Rootfs,
@@ -90,17 +83,23 @@ func (p *masterProcess) Start(c *Container) error {
 	if err := p.cmd.Start(); err != nil {
 		return err
 	}
-	p.incrChild()
 
 	// Save container pid.
 	c.Pid = p.Pid()
 
 	// Send info to container init process.
 	c.writePipe()
+
 	return nil
 }
 
 func (p *masterProcess) Wait(c *Container) error {
+	go func() {
+		p.cmd.Wait()
+		close(p.stop)
+		log.Println("Stop master process")
+	}()
+
 	p.wg.Wait()
 	p.cleanup(c)
 
@@ -118,10 +117,6 @@ func (p *masterProcess) cleanup(c *Container) {
 	}
 }
 
-func (p *masterProcess) incrChild() {
-	atomic.AddInt32(&p.childs, 1)
-}
-
 type event struct {
 	action string
 	data   interface{}
@@ -136,22 +131,6 @@ func stopHandle(sig os.Signal, c chan event) {
 
 	ev := event{
 		action: evStop,
-	}
-
-	select {
-	case c <- ev:
-	case <-time.After(time.Second * 5):
-		log.Printf("Send event timeout: %ss \n", 5)
-	}
-}
-
-func childHandle(sig os.Signal, c chan event) {
-	if debug {
-		log.Printf("handle child \n")
-	}
-
-	ev := event{
-		action: evChild,
 	}
 
 	select {
@@ -205,22 +184,33 @@ func (p *masterProcess) events(c *Container) {
 			//if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			//	errorln("Kill init process error: %v", err)
 			//}
+			log.Printf("Kill init process: %d \n", c.Pid)
 			syscall.Kill(c.Pid, syscall.SIGKILL)
-			p.cmd.Wait()
 
 		case evChild:
-			if atomic.AddInt32(&p.childs, -1) == 0 {
-				close(p.stop)
-			}
 
 		case evExec:
 			er := ev.data.(*proto.ExecRequest)
 			command, err := json.Marshal(er)
 			if err != nil {
 				log.Printf("Encode exec error: %v \n", err)
+				break
 			}
 
-			execFn := func() error {
+			execFunc := func() error {
+				parent, child, err := pipe.New()
+				if err != nil {
+					return err
+				}
+				defer parent.Close()
+				defer child.Close()
+
+				// lock file
+				lock, err := Flock(c.LockFile())
+				if err != nil {
+					return err
+				}
+
 				cmd := &exec.Cmd{
 					Dir:    "/tmp",
 					Path:   "/proc/self/exe",
@@ -228,44 +218,64 @@ func (p *masterProcess) events(c *Container) {
 					Stdout: os.Stdout,
 					Stderr: os.Stderr,
 				}
+				if cmd.SysProcAttr == nil {
+					cmd.SysProcAttr = &syscall.SysProcAttr{}
+				}
+				cmd.ExtraFiles = append(cmd.ExtraFiles, child)
+
 				// 通过环境变量给 setns 进程传递数据.
 				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_INIT_PID__=%d", c.Pid))
+				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_PIPE__=%d", 2+len(cmd.ExtraFiles)))
 				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_CMD__=%s", string(command)))
 
 				if err := cmd.Start(); err != nil {
+					Funlock(lock)
 					return fmt.Errorf("Start setns process error: %v", err)
 				}
-				p.incrChild()
-				p.incrChild()
 
-				status, err := cmd.Process.Wait()
+				pid := struct {
+					Pid int
+				}{}
+				if err := json.NewDecoder(parent).Decode(&pid); err != nil {
+					Funlock(lock)
+					return err
+				}
+
+				if debug {
+					log.Printf("Exec process pid: %d \n", pid.Pid)
+				}
+
+				if status, err := cmd.Process.Wait(); err != nil {
+					Funlock(lock)
+					return err
+				} else {
+					log.Printf("setns process: %d exit \n", status.Pid())
+				}
+
+				process, err := os.FindProcess(pid.Pid)
 				if err != nil {
-					cmd.Wait()
-					return fmt.Errorf("Process wait error: %v", err)
-				}
-				ws := status.Sys().(syscall.WaitStatus)
-				if ws.ExitStatus() == 1 {
-					cmd.Wait()
-					return fmt.Errorf("Setns process failed")
+					Funlock(lock)
+					return err
 				}
 
-				// pid 通过 exit code 返回.
-				pid := ws.ExitStatus()
+				// unlock file
+				Funlock(lock)
 
-				process, err := os.FindProcess(pid)
-				if err != nil {
-					return fmt.Errorf("Find process error: %v, pid = %d", err, pid)
+				if status, err := process.Wait(); err != nil {
+					return err
+				} else {
+					log.Printf("Exec process: %d exit \n", status.Pid())
 				}
-				cmd.Process = process
-				cmd.Wait()
 
 				ev.c <- "test"
 				return nil
 			}
 
-			if err := execFn(); err != nil {
+			if err := execFunc(); err != nil {
 				log.Printf("%v \n", err)
 			}
+
+			close(ev.c)
 
 		default:
 			if ev.c != nil {

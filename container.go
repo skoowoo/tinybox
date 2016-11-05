@@ -71,6 +71,22 @@ func NewContainer() (*Container, error) {
 		return nil, err
 	}
 
+	// Create named pipe.
+	if _, err := os.Lstat(c.PipeFile()); err != nil {
+		if os.IsNotExist(err) {
+			if err := syscall.Mkfifo(c.PipeFile(), 0); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if _, err := os.Lstat(c.LockFile()); err != nil {
+		if os.IsNotExist(err) {
+			if _, err := os.Create(c.LockFile()); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return c, nil
 }
 
@@ -123,6 +139,10 @@ func (c *Container) PipeFile() string {
 
 func (c *Container) UnixFile() string {
 	return filepath.Join(c.Dir, "unix.sock")
+}
+
+func (c *Container) LockFile() string {
+	return filepath.Join(c.Dir, "lock")
 }
 
 // Sethostname set container's hostname.

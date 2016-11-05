@@ -1,8 +1,8 @@
 package tinybox
 
 import (
-	"log"
 	"encoding/json"
+	"log"
 	"net"
 	"net/http"
 	"time"
@@ -18,21 +18,6 @@ func httpRoute(send func(event) chan interface{}) *http.ServeMux {
 			action: "hello",
 		}
 		json.NewEncoder(w).Encode(<-send(ev))
-	})
-
-	// '/v1/start/name' start init process.
-	mux.HandleFunc("/v1/start", func(w http.ResponseWriter, r *http.Request) {
-
-	})
-
-	// '/v1/stop/name' stop init process.
-	mux.HandleFunc("/v1/stop", func(w http.ResponseWriter, r *http.Request) {
-
-	})
-
-	// '/v1/delete/name' stop master process and delete container.
-	mux.HandleFunc("/v1/delete", func(w http.ResponseWriter, r *http.Request) {
-
 	})
 
 	// '/v1/exec/name' execute process in container.
@@ -66,7 +51,7 @@ func httpRoute(send func(event) chan interface{}) *http.ServeMux {
 	return mux
 }
 
-func ListenAndServe(addr string, c chan event) error {
+func ListenAndServe(addr string, c chan event, ls chan struct{}) error {
 	l, err := net.ListenUnix("unix", &net.UnixAddr{
 		Name: addr,
 		Net:  "unix",
@@ -96,6 +81,7 @@ func ListenAndServe(addr string, c chan event) error {
 	srv.SetKeepAlivesEnabled(true)
 
 	log.Printf("Http server listen on unix: %s \n", addr)
+	close(ls)
 
 	if err := srv.Serve(l); err != nil {
 		return err

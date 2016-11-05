@@ -32,5 +32,11 @@ func (p *setnsProcess) Start(c *Container) error {
 		return err
 	}
 
+	lock, err := Flock(c.LockFile())
+	if err != nil {
+		return err
+	}
+	Funlock(lock)
+
 	return syscall.Exec(er.Path, er.Argv, nil)
 }

@@ -67,7 +67,7 @@ static int clone_parent(jmp_buf * env)
 
 void nsexec()
 {
-	int i, tfd, self_tfd, child, consolefd = -1;
+	int i, tfd, self_tfd, child, pipe, len, consolefd = -1;
 	char *namespaces[] = { "ipc", "uts", "pid", "mnt" };
 	char buf[PATH_MAX], *val;
 	pid_t pid;
@@ -81,9 +81,22 @@ void nsexec()
 	pid = atoi(val);
 	snprintf(buf, sizeof(buf), "%d", pid);
 	if (strcmp(val, buf)) {
-		pr_perror("Unable to parse _LIBCONTAINER_INITPID");
+		pr_perror("__TINYBOX_INIT_PID__ invalid");
 		exit(1);
 	}
+
+
+    if ((val = getenv("__TINYBOX_PIPE__")) == NULL) {
+        return;
+    }
+
+    pipe = atoi(val);
+    snprintf(buf, sizeof(buf), "%d", pipe);
+    if (strcmp(val, buf)) {
+        pr_perror("__TINYBOX_PIPT__ invalid");
+        exit(1);
+    }
+
 
 	/* Check that the specified process exists */
 	snprintf(buf, PATH_MAX - 1, "/proc/%d/ns", pid);
@@ -134,6 +147,7 @@ void nsexec()
 	close(self_tfd);
 	close(tfd);
 
+
 	if (setjmp(env) == 1) {
 		// Child
 
@@ -173,5 +187,13 @@ void nsexec()
 		exit(1);
 	}
 
-	exit(child);
+	len = snprintf(buf, sizeof(buf), "{ \"Pid\" : %d }\n", child);
+
+	if (write(pipe, buf, len) != len) {
+		pr_perror("Unable to send a child pid");
+		kill(child, SIGKILL);
+		exit(1);
+	}
+
+	exit(0);
 }
