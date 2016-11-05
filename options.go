@@ -3,58 +3,71 @@ package tinybox
 import (
 	"flag"
 	"fmt"
+	"os"
 	"path"
 	"strings"
+)
+
+var (
+	ErrOptInvalid     = fmt.Errorf("Invalid options")
+	ErrOptNoRun       = fmt.Errorf("Not set run command or invalid")
+	ErrOptNoRoot      = fmt.Errorf("Not set root path or invalid")
+	ErrOptInvalidName = fmt.Errorf("Invalid container's name")
 )
 
 // tinybox --run='' --name='' --root=''
 // tinybox --exe='' --name=''
 
 type Options struct {
-	runCmd  string
-	exeCmd  string
-	name    string
-	root    string
-	workDir string
+	run  string
+	argv string
+	args []string
+	name string
+	root string
 }
 
 func (o *Options) register() {
-	flag.StringVar(&o.runCmd, "run", "", "Container run command")
-	flag.StringVar(&o.exeCmd, "exe", "", "Container exe command")
+	flag.StringVar(&o.run, "run", "", "Container run command")
 	flag.StringVar(&o.root, "root", "", "Container rootfs path")
-	flag.StringVar(&o.name, "name", "", "Container name")
-	flag.StringVar(&o.workDir, "work", "/var/run/tinybox", "")
 }
 
 func (o *Options) Parse() error {
+	if len(os.Args) < 2 {
+		return ErrOptInvalid
+	}
+
+	if o.name = os.Args[1]; o.name == "" {
+		return ErrOptInvalidName
+	}
+
+	if os.Args[0] == "init" || os.Args[0] == "setns" {
+		return nil
+	}
+
+	var tmp []string
+	tmp = append(tmp, os.Args[0])
+	tmp = append(tmp, os.Args[2:]...)
+	os.Args = tmp
+
 	o.register()
 	flag.Parse()
 
-	if o.runCmd == "" && o.runCmd == "" {
-		return fmt.Errorf("Not set command")
+	var err error
+	if o.argv, o.args, err = parseRun(o.run); err != nil {
+		return err
 	}
+
 	if o.root != "" && !path.IsAbs(o.root) {
-		return fmt.Errorf("Root not absolute path: %s", o.root)
-	}
-	if o.name == "" {
-		return fmt.Errorf("Not set container's name")
+		return ErrOptNoRoot
 	}
 
 	return nil
 }
 
-func (o *Options) ParseCmd(cmd string) (string, []string, error) {
-	args := strings.Fields(cmd)
+func parseRun(run string) (string, []string, error) {
+	args := strings.Fields(run)
 	if len(args) == 0 {
-		return "", nil, CmdError{cmd}
+		return "", nil, ErrOptNoRun
 	}
 	return args[0], args, nil
-}
-
-type CmdError struct {
-	cmd string
-}
-
-func (e CmdError) Error() string {
-	return fmt.Sprintf("options: Invalid command \"%s\"", e.cmd)
 }

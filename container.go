@@ -27,6 +27,7 @@ type cgroupOper interface {
 type rootfsOper interface {
 	Chroot(*Container) error
 	Mount(*Container) error
+	Unmount(*Container) error
 }
 
 type Container struct {
@@ -47,15 +48,30 @@ type Container struct {
 	setns    process       `json:"-"`
 }
 
-func NewContainer() *Container {
+func NewContainer() (*Container, error) {
+	var opt Options
+	if err := opt.Parse(); err != nil {
+		return nil, err
+	}
+
 	c := new(Container)
+	c.Name = opt.name
+	c.Dir = filepath.Join("/var/run/tinybox", c.Name)
+	c.Path = opt.argv
+	c.Argv = opt.args
+	c.Rootfs = opt.root
+
 	c.nsop = newNamespace()
 	c.fsop = &rootFs{}
 	c.master = master()
 	c.setns = setns()
 	c.init = &initProcess{}
 
-	return c
+	if err := MkdirIfNotExist(c.Dir); err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }
 
 func (c *Container) MasterStart() error {
@@ -64,6 +80,10 @@ func (c *Container) MasterStart() error {
 
 func (c *Container) MasterWait() error {
 	return c.master.Wait(c)
+}
+
+func (c *Container) LoadJson() error {
+	return c.readPipe()
 }
 
 func (c *Container) InitExec() error {

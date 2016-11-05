@@ -1,6 +1,7 @@
 package tinybox
 
 import (
+	"log"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -44,7 +45,7 @@ func httpRoute(send func(event) chan interface{}) *http.ServeMux {
 		req := &proto.ExecRequest{}
 
 		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-			errorln("Decode exec request error: %v", err)
+			log.Printf("Decode exec request error: %v \n", err)
 
 			errInfo := proto.ExecResponse{}
 			errInfo.Status = "failed"
@@ -94,13 +95,11 @@ func ListenAndServe(addr string, c chan event) error {
 	srv.WriteTimeout = time.Minute
 	srv.SetKeepAlivesEnabled(true)
 
-	infoln("http server listen on unix: %s", addr)
+	log.Printf("Http server listen on unix: %s \n", addr)
 
 	if err := srv.Serve(l); err != nil {
 		return err
 	}
-
-	debugln("http server exit")
 
 	return nil
 }
