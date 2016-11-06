@@ -2,6 +2,7 @@ package tinybox
 
 import (
 	"log"
+	"os"
 	"syscall"
 )
 
@@ -28,5 +29,5 @@ func (p *initProcess) Exec(c *Container) error {
 
 	log.Printf("Run init process: %s, %v", c.Path, c.Argv)
 
-	return syscall.Exec(c.Path, c.Argv, nil)
+	return syscall.Exec(c.Path, c.Argv, os.Environ())
 }

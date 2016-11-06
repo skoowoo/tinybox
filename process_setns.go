@@ -38,5 +38,5 @@ func (p *setnsProcess) Start(c *Container) error {
 	}
 	Funlock(lock)
 
-	return syscall.Exec(er.Path, er.Argv, nil)
+	return syscall.Exec(er.Path, er.Argv, os.Environ())
 }
