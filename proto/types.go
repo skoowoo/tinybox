@@ -1,5 +1,10 @@
 package proto
 
+const (
+	Success = "success"
+	Failed  = "failed"
+)
+
 type Response struct {
 	Status string `json:"status"`
 	Desc   string `json:"desc"`
@@ -12,6 +17,6 @@ type ExecRequest struct {
 
 type ExecResponse struct {
 	Response
-	Stdout []byte `json:"stdout"`
-	Stderr []byte `json:"stderr"`
+	Stdout string `json:"stdout"`
+	Stderr string `json:"stderr"`
 }

@@ -19,16 +19,24 @@ var (
 // tinybox --exe='' --name=''
 
 type Options struct {
-	run  string
-	argv string
-	args []string
-	name string
-	root string
+	run      string
+	argv     string
+	args     []string
+	name     string
+	root     string
+	wd       string
+	env      string
+	stdout   bool
+	stderr   bool
+	hostname string
 }
 
 func (o *Options) register() {
 	flag.StringVar(&o.run, "run", "", "Container run command")
 	flag.StringVar(&o.root, "root", "", "Container rootfs path")
+	flag.StringVar(&o.wd, "wd", "/", "Container working directory")
+	flag.StringVar(&o.env, "env", "", "Container env var")
+	flag.StringVar(&o.hostname, "hostname", "", "Container host name")
 }
 
 func (o *Options) Parse() error {

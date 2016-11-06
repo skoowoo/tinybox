@@ -2,7 +2,6 @@ package tinybox
 
 import (
 	"log"
-	"os"
 	"syscall"
 )
 
@@ -11,6 +10,10 @@ type initProcess struct {
 }
 
 func (p *initProcess) Exec(c *Container) error {
+	if debug {
+		log.Printf("Container info: %+v \n", c)
+	}
+
 	// Mount filesystem
 	if err := c.fsop.Mount(c); err != nil {
 		return err
@@ -20,14 +23,6 @@ func (p *initProcess) Exec(c *Container) error {
 	if c.Rootfs != "" {
 		if err := c.fsop.Chroot(c); err != nil {
 			return err
-		}
-	}
-
-	if debug {
-		log.Printf("Container info: %+v \n", c)
-		log.Printf("Container init process: pid=%d \n", os.Getpid())
-		if h, err := os.Hostname(); err == nil {
-			log.Printf("Container hostname: %s \n", h)
 		}
 	}
 

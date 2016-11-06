@@ -1,8 +1,10 @@
 package tinybox
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -211,12 +213,39 @@ func (p *masterProcess) events(c *Container) {
 					return err
 				}
 
+				var wg sync.WaitGroup
+				wg.Add(2)
+
+				ro, wo, err := os.Pipe()
+				if err != nil {
+					Funlock(lock)
+					return err
+				}
+				outbuf := bytes.NewBuffer(make([]byte, 0, 1000))
+				go func() {
+					defer wg.Done()
+					io.Copy(outbuf, ro)
+					ro.Close()
+				}()
+
+				re, we, err := os.Pipe()
+				if err != nil {
+					Funlock(lock)
+					return err
+				}
+				errbuf := bytes.NewBuffer(make([]byte, 0, 1000))
+				go func() {
+					defer wg.Done()
+					io.Copy(errbuf, re)
+					re.Close()
+				}()
+
 				cmd := &exec.Cmd{
 					Dir:    "/tmp",
 					Path:   "/proc/self/exe",
 					Args:   []string{"setns", c.Name},
-					Stdout: os.Stdout,
-					Stderr: os.Stderr,
+					Stdout: wo,
+					Stderr: we,
 				}
 				if cmd.SysProcAttr == nil {
 					cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -232,6 +261,9 @@ func (p *masterProcess) events(c *Container) {
 					Funlock(lock)
 					return fmt.Errorf("Start setns process error: %v", err)
 				}
+
+				wo.Close()
+				we.Close()
 
 				pid := struct {
 					Pid int
@@ -267,7 +299,15 @@ func (p *masterProcess) events(c *Container) {
 					log.Printf("Exec process: %d exit \n", status.Pid())
 				}
 
-				ev.c <- "test"
+				wg.Wait()
+
+				var resp proto.ExecResponse
+				resp.Status = proto.Success
+				resp.Stdout = outbuf.String()
+				resp.Stderr = errbuf.String()
+
+				ev.c <- resp
+
 				return nil
 			}
 

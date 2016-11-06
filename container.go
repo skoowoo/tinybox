@@ -31,21 +31,26 @@ type rootfsOper interface {
 }
 
 type Container struct {
-	Rootfs   string        `json:"rootfs"`
-	Path     string        `json:"path"` // the binary path of the first process.
-	Argv     []string      `json:"argv"`
-	Pid      int           `json:"pid"`  // process id of the init process
-	Name     string        `json:"name"` // container's name
-	Hostname string        `json:"hostname"`
-	Running  bool          `json:"running"`
-	Uptime   time.Time     `json:"uptime"`
-	Dir      string        `json:"dir"`
-	nsop     namespaceOper `json:"-"`
-	cgop     cgroupOper    `json:"-"`
-	fsop     rootfsOper    `json:"-"`
-	init     process       `json:"-"`
-	master   process       `json:"-"`
-	setns    process       `json:"-"`
+	Name string `json:"name"` // container's name
+	Dir  string `json:"dir"`
+
+	Rootfs   string   `json:"rootfs"`
+	Path     string   `json:"path"` // the binary path of the first process.
+	Argv     []string `json:"argv"`
+	Hostname string   `json:"hostname"`
+	Stdout   bool     `json:"stdout"`
+	Stderr   bool     `json:"stderr"`
+
+	Uptime  time.Time `json:"uptime"`
+	Pid     int       `json:"pid"` // process id of the init process
+	Running bool      `json:"running"`
+
+	nsop   namespaceOper `json:"-"`
+	cgop   cgroupOper    `json:"-"`
+	fsop   rootfsOper    `json:"-"`
+	init   process       `json:"-"`
+	master process       `json:"-"`
+	setns  process       `json:"-"`
 }
 
 func NewContainer() (*Container, error) {
@@ -57,9 +62,13 @@ func NewContainer() (*Container, error) {
 	c := new(Container)
 	c.Name = opt.name
 	c.Dir = filepath.Join("/var/run/tinybox", c.Name)
+
+	c.Rootfs = opt.root
 	c.Path = opt.argv
 	c.Argv = opt.args
-	c.Rootfs = opt.root
+	c.Hostname = opt.hostname
+	c.Stdout = opt.stdout
+	c.Stderr = opt.stderr
 
 	c.nsop = newNamespace()
 	c.fsop = &rootFs{}
