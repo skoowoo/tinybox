@@ -3,18 +3,11 @@ package tinybox
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"syscall"
-	"time"
 )
-
-type process interface {
-	Start(*Container) error
-	Wait(*Container) error
-	Exec(*Container) error
-	Pid() int
-}
 
 type namespaceOper interface {
 	Cloneflags(*Container) uintptr
@@ -38,12 +31,8 @@ type Container struct {
 	Path     string   `json:"path"` // the binary path of the first process.
 	Argv     []string `json:"argv"`
 	Hostname string   `json:"hostname"`
-	Stdout   bool     `json:"stdout"`
-	Stderr   bool     `json:"stderr"`
 
-	Uptime  time.Time `json:"uptime"`
 	Pid     int       `json:"pid"` // process id of the init process
-	Running bool      `json:"running"`
 
 	nsop   namespaceOper `json:"-"`
 	cgop   cgroupOper    `json:"-"`
@@ -51,6 +40,7 @@ type Container struct {
 	init   process       `json:"-"`
 	master process       `json:"-"`
 	setns  process       `json:"-"`
+	isExec bool          `json:"-"`
 }
 
 func NewContainer() (*Container, error) {
@@ -62,13 +52,7 @@ func NewContainer() (*Container, error) {
 	c := new(Container)
 	c.Name = opt.name
 	c.Dir = filepath.Join("/var/run/tinybox", c.Name)
-
-	c.Rootfs = opt.root
-	c.Path = opt.argv
-	c.Argv = opt.args
-	c.Hostname = opt.hostname
-	c.Stdout = opt.stdout
-	c.Stderr = opt.stderr
+	c.isExec = opt.IsExec()
 
 	c.nsop = newNamespace()
 	c.fsop = &rootFs{}
@@ -96,15 +80,34 @@ func NewContainer() (*Container, error) {
 			}
 		}
 	}
+
+	if opt.IsExec() {
+		info, err := ioutil.ReadFile(c.JsonFile())
+		if err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(info, c); err != nil {
+			return nil, err
+		}
+
+		c.Path = opt.argv
+		c.Argv = nil
+		c.Hostname = ""
+		c.Rootfs = ""
+
+		return c, nil
+	}
+
+	c.Rootfs = opt.root
+	c.Path = opt.argv
+	c.Argv = opt.args
+	c.Hostname = opt.hostname
+
 	return c, nil
 }
 
 func (c *Container) MasterStart() error {
 	return c.master.Start(c)
-}
-
-func (c *Container) MasterWait() error {
-	return c.master.Wait(c)
 }
 
 func (c *Container) LoadJson() error {
@@ -141,7 +144,6 @@ func (c *Container) readPipe() error {
 	return json.NewDecoder(pipe).Decode(c)
 }
 
-// PipeFile return container's pipe file path.
 func (c *Container) PipeFile() string {
 	return filepath.Join(c.Dir, "pipe")
 }
@@ -152,6 +154,10 @@ func (c *Container) UnixFile() string {
 
 func (c *Container) LockFile() string {
 	return filepath.Join(c.Dir, "lock")
+}
+
+func (c *Container) JsonFile() string {
+	return filepath.Join(c.Dir, "container.json")
 }
 
 // Sethostname set container's hostname.

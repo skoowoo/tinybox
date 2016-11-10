@@ -1,10 +1,9 @@
 package tinybox
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -14,13 +13,13 @@ import (
 	"time"
 
 	"github.com/skoo87/tinybox/pipe"
-	"github.com/skoo87/tinybox/proto"
 )
 
 const (
 	evStop  = "stop"
 	evChild = "child"
 	evExec  = "exec"
+	evInfo  = "info"
 )
 
 type masterProcess struct {
@@ -43,7 +42,85 @@ func master() *masterProcess {
 	}
 }
 
+func (p *masterProcess) eStart(c *Container) error {
+	parent, child, err := pipe.New()
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	defer child.Close()
+
+	// lock file
+	lock, err := Flock(c.LockFile())
+	if err != nil {
+		return err
+	}
+
+	cmd := &exec.Cmd{
+		Dir:    "/tmp",
+		Path:   "/proc/self/exe",
+		Args:   []string{"setns", c.Name},
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		Stdin:  os.Stdin,
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.ExtraFiles = append(cmd.ExtraFiles, child)
+
+	// 通过环境变量给 setns 进程传递数据.
+	cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_INIT_PID__=%d", c.Pid))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_PIPE__=%d", 2+len(cmd.ExtraFiles)))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_CMD__=%s", c.Path))
+
+	if err := cmd.Start(); err != nil {
+		Funlock(lock)
+		return fmt.Errorf("Start setns process error: %v", err)
+	}
+
+	pid := struct {
+		Pid int
+	}{}
+	if err := json.NewDecoder(parent).Decode(&pid); err != nil {
+		Funlock(lock)
+		return err
+	}
+
+	if debug {
+		log.Printf("Exec process pid: %d \n", pid.Pid)
+	}
+
+	if status, err := cmd.Process.Wait(); err != nil {
+		Funlock(lock)
+		return err
+	} else {
+		log.Printf("setns process: %d exit \n", status.Pid())
+	}
+
+	process, err := os.FindProcess(pid.Pid)
+	if err != nil {
+		Funlock(lock)
+		return err
+	}
+
+	// unlock file
+	Funlock(lock)
+
+	if status, err := process.Wait(); err != nil {
+		return err
+	} else {
+		log.Printf("Exec process: %d exit \n", status.Pid())
+	}
+
+	return nil
+}
+
 func (p *masterProcess) Start(c *Container) error {
+	if c.isExec {
+		return p.eStart(c)
+	}
+
 	go func() {
 		p.wg.Add(1)
 		defer p.wg.Done()
@@ -59,17 +136,6 @@ func (p *masterProcess) Start(c *Container) error {
 		p.events(c)
 		log.Println("Event loop exited")
 	}()
-
-	// http sever base on unix domain socket.
-	ls := make(chan struct{})
-	go func() {
-		if err := ListenAndServe(c.UnixFile(), p.ec, ls); err != nil {
-			log.Printf("Http server error: %v \n", err)
-			os.Exit(1)
-		}
-	}()
-
-	<-ls
 
 	p.cmd = &exec.Cmd{
 		Dir:         c.Rootfs,
@@ -92,7 +158,17 @@ func (p *masterProcess) Start(c *Container) error {
 	// Send info to container init process.
 	c.writePipe()
 
-	return nil
+	// write container's info into disk
+	info, err := json.Marshal(c)
+	if err != nil {
+		log.Println(err)
+	} else {
+		if err = ioutil.WriteFile(c.JsonFile(), info, 0644); err != nil {
+			log.Println(err)
+		}
+	}
+
+	return p.Wait(c)
 }
 
 func (p *masterProcess) Wait(c *Container) error {
@@ -182,140 +258,10 @@ func (p *masterProcess) events(c *Container) {
 
 		switch ev.action {
 		case evStop:
-			// Kill the init process, and all processes must be stopped.
-			//if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			//	errorln("Kill init process error: %v", err)
-			//}
 			log.Printf("Kill init process: %d \n", c.Pid)
 			syscall.Kill(c.Pid, syscall.SIGKILL)
 
 		case evChild:
-
-		case evExec:
-			er := ev.data.(*proto.ExecRequest)
-			command, err := json.Marshal(er)
-			if err != nil {
-				log.Printf("Encode exec error: %v \n", err)
-				break
-			}
-
-			execFunc := func() error {
-				parent, child, err := pipe.New()
-				if err != nil {
-					return err
-				}
-				defer parent.Close()
-				defer child.Close()
-
-				// lock file
-				lock, err := Flock(c.LockFile())
-				if err != nil {
-					return err
-				}
-
-				var wg sync.WaitGroup
-				wg.Add(2)
-
-				ro, wo, err := os.Pipe()
-				if err != nil {
-					Funlock(lock)
-					return err
-				}
-				outbuf := bytes.NewBuffer(make([]byte, 0, 1000))
-				go func() {
-					defer wg.Done()
-					io.Copy(outbuf, ro)
-					ro.Close()
-				}()
-
-				re, we, err := os.Pipe()
-				if err != nil {
-					Funlock(lock)
-					return err
-				}
-				errbuf := bytes.NewBuffer(make([]byte, 0, 1000))
-				go func() {
-					defer wg.Done()
-					io.Copy(errbuf, re)
-					re.Close()
-				}()
-
-				cmd := &exec.Cmd{
-					Dir:    "/tmp",
-					Path:   "/proc/self/exe",
-					Args:   []string{"setns", c.Name},
-					Stdout: wo,
-					Stderr: we,
-				}
-				if cmd.SysProcAttr == nil {
-					cmd.SysProcAttr = &syscall.SysProcAttr{}
-				}
-				cmd.ExtraFiles = append(cmd.ExtraFiles, child)
-
-				// 通过环境变量给 setns 进程传递数据.
-				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_INIT_PID__=%d", c.Pid))
-				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_PIPE__=%d", 2+len(cmd.ExtraFiles)))
-				cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_CMD__=%s", string(command)))
-
-				if err := cmd.Start(); err != nil {
-					Funlock(lock)
-					return fmt.Errorf("Start setns process error: %v", err)
-				}
-
-				wo.Close()
-				we.Close()
-
-				pid := struct {
-					Pid int
-				}{}
-				if err := json.NewDecoder(parent).Decode(&pid); err != nil {
-					Funlock(lock)
-					return err
-				}
-
-				if debug {
-					log.Printf("Exec process pid: %d \n", pid.Pid)
-				}
-
-				if status, err := cmd.Process.Wait(); err != nil {
-					Funlock(lock)
-					return err
-				} else {
-					log.Printf("setns process: %d exit \n", status.Pid())
-				}
-
-				process, err := os.FindProcess(pid.Pid)
-				if err != nil {
-					Funlock(lock)
-					return err
-				}
-
-				// unlock file
-				Funlock(lock)
-
-				if status, err := process.Wait(); err != nil {
-					return err
-				} else {
-					log.Printf("Exec process: %d exit \n", status.Pid())
-				}
-
-				wg.Wait()
-
-				var resp proto.ExecResponse
-				resp.Status = proto.Success
-				resp.Stdout = outbuf.String()
-				resp.Stderr = errbuf.String()
-
-				ev.c <- resp
-
-				return nil
-			}
-
-			if err := execFunc(); err != nil {
-				log.Printf("%v \n", err)
-			}
-
-			close(ev.c)
 
 		default:
 			if ev.c != nil {

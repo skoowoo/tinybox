@@ -20,18 +20,18 @@ var (
 
 type Options struct {
 	run      string
+	exec     string
 	argv     string
 	args     []string
 	name     string
 	root     string
 	wd       string
-	stdout   bool
-	stderr   bool
 	hostname string
 }
 
 func (o *Options) register() {
 	flag.StringVar(&o.run, "run", "", "Container run command")
+	flag.StringVar(&o.exec, "exec", "", "")
 	flag.StringVar(&o.root, "root", "", "Container rootfs path")
 	flag.StringVar(&o.wd, "wd", "/", "Container working directory")
 	flag.StringVar(&o.hostname, "hostname", "", "Container host name")
@@ -58,16 +58,25 @@ func (o *Options) Parse() error {
 	o.register()
 	flag.Parse()
 
-	var err error
-	if o.argv, o.args, err = parseRun(o.run); err != nil {
-		return err
-	}
+	o.argv = o.exec
 
-	if o.root != "" && !path.IsAbs(o.root) {
-		return ErrOptNoRoot
+	var err error
+
+	if o.run != "" {
+		if o.argv, o.args, err = parseRun(o.run); err != nil {
+			return err
+		}
+
+		if o.root != "" && !path.IsAbs(o.root) {
+			return ErrOptNoRoot
+		}
 	}
 
 	return nil
+}
+
+func (o *Options) IsExec() bool {
+	return o.run == "" && o.exec != ""
 }
 
 func parseRun(run string) (string, []string, error) {

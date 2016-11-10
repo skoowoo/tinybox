@@ -93,7 +93,7 @@ void nsexec()
     pipe = atoi(val);
     snprintf(buf, sizeof(buf), "%d", pipe);
     if (strcmp(val, buf)) {
-        pr_perror("__TINYBOX_PIPT__ invalid");
+        pr_perror("__TINYBOX_PIPE__ invalid");
         exit(1);
     }
 
@@ -151,10 +151,12 @@ void nsexec()
 	if (setjmp(env) == 1) {
 		// Child
 
+#if 0
 		if (setsid() == -1) {
 			pr_perror("setsid failed");
 			exit(1);
 		}
+#endif
 		if (consolefd != -1) {
 			if (ioctl(consolefd, TIOCSCTTY, 0) == -1) {
 				pr_perror("ioctl TIOCSCTTY failed");

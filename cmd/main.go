@@ -59,5 +59,4 @@ func main() {
 	if err := c.MasterStart(); err != nil {
 		log.Fatalln(err)
 	}
-	c.MasterWait()
 }

@@ -26,7 +26,6 @@ func (fs *rootFs) Mount(c *Container) error {
 }
 
 func (fs *rootFs) Unmount(c *Container) error {
-	syscall.Unmount(c.Rootfs, 0)
 	syscall.Unmount(path.Join(c.Rootfs, "proc"), 0)
 	return nil
 }

@@ -4,15 +4,17 @@ import (
 	"os/exec"
 )
 
+type process interface {
+	Start(*Container) error
+	Exec(*Container) error
+	Pid() int
+}
+
 type base struct {
 	cmd *exec.Cmd
 }
 
 func (p *base) Start(c *Container) error {
-	return nil
-}
-
-func (p *base) Wait(c *Container) error {
 	return nil
 }
 

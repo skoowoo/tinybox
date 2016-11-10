@@ -1,12 +1,10 @@
 package tinybox
 
 import (
-	"encoding/json"
 	"log"
 	"os"
+	"strings"
 	"syscall"
-
-	"github.com/skoo87/tinybox/proto"
 )
 
 type setnsProcess struct {
@@ -27,16 +25,15 @@ func (p *setnsProcess) Start(c *Container) error {
 		log.Printf("setns command: %s \n", cmd)
 	}
 
-	var er proto.ExecRequest
-	if err := json.Unmarshal([]byte(cmd), &er); err != nil {
-		return err
-	}
-
 	lock, err := Flock(c.LockFile())
 	if err != nil {
 		return err
 	}
 	Funlock(lock)
 
-	return syscall.Exec(er.Path, er.Argv, os.Environ())
+	argv := strings.Fields(cmd)
+	if len(argv) == 0 {
+		return nil
+	}
+	return syscall.Exec(argv[0], argv, os.Environ())
 }
