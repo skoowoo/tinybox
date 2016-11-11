@@ -23,7 +23,7 @@ const (
 )
 
 type masterProcess struct {
-	base
+	cmd  *exec.Cmd
 	opt  Options
 	ec   chan event
 	sigs map[os.Signal]func(os.Signal, chan event)
@@ -155,7 +155,7 @@ func (p *masterProcess) Start(c *Container) error {
 	}
 
 	// Save container pid.
-	c.Pid = p.Pid()
+	c.Pid = p.cmd.Process.Pid
 
 	// Set cgroup before init process running.
 	if err := p.cgroup(c); err != nil {

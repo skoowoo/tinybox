@@ -43,10 +43,9 @@ type Container struct {
 	nsop   namespaceOper `json:"-"`
 	cgop   cgroupOper    `json:"-"`
 	fsop   rootfsOper    `json:"-"`
-	init   process       `json:"-"`
-	master process       `json:"-"`
-	setns  process       `json:"-"`
+	P      process       `json:"-"`
 	isExec bool          `json:"-"`
+	typ    string        `json:"-"`
 }
 
 func NewContainer() (*Container, error) {
@@ -60,16 +59,6 @@ func NewContainer() (*Container, error) {
 	c.Dir = filepath.Join("/var/run/tinybox", c.Name)
 	c.isExec = opt.IsExec()
 	c.CgPrefix = "tinybox"
-
-	var err error
-	if c.cgop, err = newCGroup(); err != nil {
-		return nil, err
-	}
-	c.nsop = newNamespace()
-	c.fsop = &rootFs{}
-	c.master = master()
-	c.setns = setns()
-	c.init = &initProcess{}
 
 	if err := MkdirIfNotExist(c.Dir); err != nil {
 		return nil, err
@@ -117,20 +106,33 @@ func NewContainer() (*Container, error) {
 	return c, nil
 }
 
+func (c *Container) SetByType(typ string) error {
+	c.typ = typ
+
+	c.nsop = newNamespace()
+	c.fsop = &rootFs{}
+
+	switch typ {
+	case "init":
+		c.P = &initProcess{}
+
+	case "setns":
+		c.P = setns()
+
+	default:
+		c.P = master()
+
+		var err error
+		if c.cgop, err = newCGroup(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (c *Container) WaitJson() error {
 	return c.readPipe()
-}
-
-func (c *Container) MasterStart() error {
-	return c.master.Start(c)
-}
-
-func (c *Container) InitExec() error {
-	return c.init.Exec(c)
-}
-
-func (c *Container) SetnsStart() error {
-	return c.setns.Start(c)
 }
 
 // writePipe write the json of Container into pipe

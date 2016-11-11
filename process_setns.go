@@ -9,7 +9,6 @@ import (
 )
 
 type setnsProcess struct {
-	base
 }
 
 func setns() *setnsProcess {

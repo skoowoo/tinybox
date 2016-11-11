@@ -25,38 +25,16 @@ func main() {
 
 	log.Printf(">>>>> %v \n", os.Args)
 
-	// init child process
-	if os.Args[0] == "init" {
-		runtime.GOMAXPROCS(1)
-		runtime.LockOSThread()
-		log.SetPrefix("init: ")
-
-		if err := c.WaitJson(); err != nil {
-			log.Fatalf("Init process load container error: %v", err)
-		}
-
-		if err := c.InitExec(); err != nil {
-			log.Fatalln(err)
-		}
-		os.Exit(0)
+	typ := os.Args[0]
+	if err := c.SetByType(typ); err != nil {
+		log.Fatalln(err)
 	}
 
-	// setns child process
-	if os.Args[0] == "setns" {
-		runtime.GOMAXPROCS(1)
-		runtime.LockOSThread()
-		log.SetPrefix("setns: ")
+	runtime.GOMAXPROCS(1)
+	runtime.LockOSThread()
+	log.SetPrefix(typ + ": ")
 
-		if err := c.SetnsStart(); err != nil {
-			log.Fatalln(err)
-		}
-		os.Exit(0)
-	}
-
-	log.SetPrefix("master: ")
-
-	// master parent process
-	if err := c.MasterStart(); err != nil {
+	if err := c.P.Start(c); err != nil {
 		log.Fatalln(err)
 	}
 }

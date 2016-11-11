@@ -1,16 +1,20 @@
 package tinybox
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"syscall"
 )
 
 type initProcess struct {
-	base
 }
 
-func (p *initProcess) Exec(c *Container) error {
+func (p *initProcess) Start(c *Container) error {
+	if err := c.WaitJson(); err != nil {
+		return fmt.Errorf("Init process load container error: %v", err)
+	}
+
 	if debug {
 		log.Printf("Container info: %+v \n", c)
 	}
