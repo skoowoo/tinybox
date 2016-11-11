@@ -1,10 +1,8 @@
 package tinybox
 
-import (
-)
+import ()
 
 var debug = true
 
 func init() {
 }
-

@@ -157,6 +157,12 @@ func (p *masterProcess) Start(c *Container) error {
 	// Save container pid.
 	c.Pid = p.Pid()
 
+	// Set cgroup before init process running.
+	if err := p.cgroup(c); err != nil {
+		log.Println(err)
+		return p.failToWait(c)
+	}
+
 	// Send info to container init process.
 	c.writePipe()
 
@@ -170,6 +176,11 @@ func (p *masterProcess) Start(c *Container) error {
 		}
 	}
 
+	return p.wait(c)
+}
+
+func (p *masterProcess) failToWait(c *Container) error {
+	syscall.Kill(c.Pid, syscall.SIGKILL)
 	return p.wait(c)
 }
 
@@ -192,6 +203,30 @@ func (p *masterProcess) cleanup(c *Container) {
 	if err := os.Remove(c.PipeFile()); err != nil {
 		log.Printf("Remove pipe %s error: %v \n", err)
 	}
+
+	for _, path := range c.cgop.Paths() {
+		if err := os.Remove(path); err != nil {
+			if !os.IsNotExist(err) {
+				log.Printf("Remove %s error: %v \n", path, err)
+			}
+		}
+	}
+}
+
+func (p *masterProcess) cgroup(c *Container) error {
+	if err := c.cgop.Memory(c); err != nil {
+		return err
+	}
+	if err := c.cgop.CpuSet(c); err != nil {
+		return err
+	}
+	if err := c.cgop.CpuAcct(c); err != nil {
+		return err
+	}
+	if err := c.cgop.CPU(c); err != nil {
+		return err
+	}
+	return nil
 }
 
 type event struct {

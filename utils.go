@@ -1,7 +1,9 @@
 package tinybox
 
 import (
+	"io/ioutil"
 	"os"
+	"strconv"
 	"syscall"
 )
 
@@ -31,4 +33,12 @@ func Flock(path string) (*os.File, error) {
 func Funlock(file *os.File) error {
 	defer file.Close()
 	return syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+}
+
+func WriteFileInt(file string, v int) error {
+	return WriteFileStr(file, strconv.Itoa(v))
+}
+
+func WriteFileStr(file string, v string) error {
+	return ioutil.WriteFile(file, []byte(v), 0644)
 }

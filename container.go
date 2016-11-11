@@ -15,6 +15,11 @@ type namespaceOper interface {
 }
 
 type cgroupOper interface {
+	Paths() map[string]string
+	Memory(*Container) error
+	CPU(*Container) error
+	CpuAcct(*Container) error
+	CpuSet(*Container) error
 }
 
 type rootfsOper interface {
@@ -31,6 +36,7 @@ type Container struct {
 	Path     string   `json:"path"` // the binary path of the first process.
 	Argv     []string `json:"argv"`
 	Hostname string   `json:"hostname"`
+	CgPrefix string
 
 	Pid int `json:"pid"` // process id of the init process
 
@@ -53,7 +59,12 @@ func NewContainer() (*Container, error) {
 	c.Name = opt.name
 	c.Dir = filepath.Join("/var/run/tinybox", c.Name)
 	c.isExec = opt.IsExec()
+	c.CgPrefix = "tinybox"
 
+	var err error
+	if c.cgop, err = newCGroup(); err != nil {
+		return nil, err
+	}
 	c.nsop = newNamespace()
 	c.fsop = &rootFs{}
 	c.master = master()
@@ -106,12 +117,12 @@ func NewContainer() (*Container, error) {
 	return c, nil
 }
 
-func (c *Container) MasterStart() error {
-	return c.master.Start(c)
+func (c *Container) WaitJson() error {
+	return c.readPipe()
 }
 
-func (c *Container) LoadJson() error {
-	return c.readPipe()
+func (c *Container) MasterStart() error {
+	return c.master.Start(c)
 }
 
 func (c *Container) InitExec() error {
@@ -154,9 +165,4 @@ func (c *Container) LockFile() string {
 
 func (c *Container) JsonFile() string {
 	return filepath.Join(c.Dir, "container.json")
-}
-
-// Sethostname set container's hostname.
-func (c *Container) sethostname() error {
-	return syscall.Sethostname([]byte(c.Hostname))
 }

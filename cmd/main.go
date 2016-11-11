@@ -31,7 +31,7 @@ func main() {
 		runtime.LockOSThread()
 		log.SetPrefix("init: ")
 
-		if err := c.LoadJson(); err != nil {
+		if err := c.WaitJson(); err != nil {
 			log.Fatalf("Init process load container error: %v", err)
 		}
 
