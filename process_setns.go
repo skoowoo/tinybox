@@ -3,6 +3,7 @@ package tinybox
 import (
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"syscall"
 )
@@ -35,5 +36,11 @@ func (p *setnsProcess) Start(c *Container) error {
 	if len(argv) == 0 {
 		return nil
 	}
-	return syscall.Exec(argv[0], argv, os.Environ())
+
+	path, err := exec.LookPath(argv[0])
+	if err != nil {
+		return err
+	}
+
+	return syscall.Exec(path, argv, os.Environ())
 }

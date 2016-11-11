@@ -32,7 +32,7 @@ type Container struct {
 	Argv     []string `json:"argv"`
 	Hostname string   `json:"hostname"`
 
-	Pid     int       `json:"pid"` // process id of the init process
+	Pid int `json:"pid"` // process id of the init process
 
 	nsop   namespaceOper `json:"-"`
 	cgop   cgroupOper    `json:"-"`
@@ -146,10 +146,6 @@ func (c *Container) readPipe() error {
 
 func (c *Container) PipeFile() string {
 	return filepath.Join(c.Dir, "pipe")
-}
-
-func (c *Container) UnixFile() string {
-	return filepath.Join(c.Dir, "unix.sock")
 }
 
 func (c *Container) LockFile() string {

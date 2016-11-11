@@ -69,7 +69,7 @@ func (p *masterProcess) eStart(c *Container) error {
 	}
 	cmd.ExtraFiles = append(cmd.ExtraFiles, child)
 
-	// 通过环境变量给 setns 进程传递数据.
+	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_INIT_PID__=%d", c.Pid))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_PIPE__=%d", 2+len(cmd.ExtraFiles)))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("__TINYBOX_CMD__=%s", c.Path))
@@ -148,6 +148,8 @@ func (p *masterProcess) Start(c *Container) error {
 	}
 	p.cmd.SysProcAttr.Cloneflags = c.nsop.Cloneflags(c)
 
+	p.cmd.Env = append(p.cmd.Env, os.Environ()...)
+
 	if err := p.cmd.Start(); err != nil {
 		return err
 	}
@@ -168,10 +170,10 @@ func (p *masterProcess) Start(c *Container) error {
 		}
 	}
 
-	return p.Wait(c)
+	return p.wait(c)
 }
 
-func (p *masterProcess) Wait(c *Container) error {
+func (p *masterProcess) wait(c *Container) error {
 	go func() {
 		p.cmd.Wait()
 		close(p.stop)
@@ -187,9 +189,6 @@ func (p *masterProcess) Wait(c *Container) error {
 func (p *masterProcess) cleanup(c *Container) {
 	c.fsop.Unmount(c)
 
-	if err := os.Remove(c.UnixFile()); err != nil {
-		log.Printf("Remove unix socket %s error: %v \n", err)
-	}
 	if err := os.Remove(c.PipeFile()); err != nil {
 		log.Printf("Remove pipe %s error: %v \n", err)
 	}
