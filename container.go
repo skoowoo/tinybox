@@ -16,6 +16,7 @@ type namespaceOper interface {
 
 type cgroupOper interface {
 	Paths() map[string]string
+	Validate(*Container) error
 	Memory(*Container) error
 	CPU(*Container) error
 	CpuAcct(*Container) error
@@ -32,11 +33,12 @@ type Container struct {
 	Name string `json:"name"` // container's name
 	Dir  string `json:"dir"`
 
-	Rootfs   string   `json:"rootfs"`
-	Path     string   `json:"path"` // the binary path of the first process.
-	Argv     []string `json:"argv"`
-	Hostname string   `json:"hostname"`
-	CgPrefix string
+	Rootfs   string        `json:"rootfs"`
+	Path     string        `json:"path"` // the binary path of the first process.
+	Argv     []string      `json:"argv"`
+	Hostname string        `json:"hostname"`
+	CgPrefix string        `json:"cgprefix"`
+	CgOpts   CGroupOptions `json:"cgopts"`
 
 	Pid int `json:"pid"` // process id of the init process
 
@@ -124,6 +126,10 @@ func (c *Container) SetByType(typ string) error {
 
 		var err error
 		if c.cgop, err = newCGroup(); err != nil {
+			return err
+		}
+
+		if err := c.cgop.Validate(c); err != nil {
 			return err
 		}
 	}

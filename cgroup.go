@@ -33,6 +33,35 @@ var subs = []string{
 	subsysHT,
 }
 
+type CGroupOptions struct {
+}
+
+type CGroupSetter interface {
+	IsSubsys(typ string) bool
+	Validate(*CGroupOptions) error
+	Write(*CGroupOptions, string) error
+}
+
+type SetterSlice []CGroupSetter
+
+var setters SetterSlice
+
+func registerSetter(s CGroupSetter) {
+	setters = append(setters, s)
+}
+
+func (ss SetterSlice) Write(typ, dir string, opt *CGroupOptions) error {
+	for _, setter := range ss {
+		if !setter.IsSubsys(typ) {
+			continue
+		}
+		if err := setter.Write(opt, dir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type CGroup struct {
 	mounts map[string]string
 	roots  map[string]string
@@ -123,6 +152,15 @@ func (cg *CGroup) Paths() map[string]string {
 	return cg.paths
 }
 
+func (cg *CGroup) Validate(c *Container) error {
+	for _, setter := range setters {
+		if err := setter.Validate(&c.CgOpts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (cg *CGroup) Memory(c *Container) error {
 	group, err := cg.cgroupPath(subsysMEM, c)
 	if err != nil {
@@ -134,8 +172,7 @@ func (cg *CGroup) Memory(c *Container) error {
 	}
 
 	cg.paths[subsysMEM] = group
-
-	return nil
+	return setters.Write(subsysMEM, group, &c.CgOpts)
 }
 
 func (cg *CGroup) CPU(c *Container) error {
@@ -149,8 +186,7 @@ func (cg *CGroup) CPU(c *Container) error {
 	}
 
 	cg.paths[subsysCPU] = group
-
-	return nil
+	return setters.Write(subsysCPU, group, &c.CgOpts)
 }
 
 func (cg *CGroup) CpuAcct(c *Container) error {
@@ -164,8 +200,7 @@ func (cg *CGroup) CpuAcct(c *Container) error {
 	}
 
 	cg.paths[subsysCA] = group
-
-	return nil
+	return setters.Write(subsysCA, group, &c.CgOpts)
 }
 
 func (cg *CGroup) CpuSet(c *Container) error {
@@ -179,8 +214,7 @@ func (cg *CGroup) CpuSet(c *Container) error {
 	//}
 
 	cg.paths[subsysCS] = group
-
-	return nil
+	return setters.Write(subsysCS, group, &c.CgOpts)
 }
 
 func (cg *CGroup) cgroupPath(name string, c *Container) (string, error) {
