@@ -157,7 +157,7 @@ func (p *masterProcess) Start(c *Container) error {
 	// Save container pid.
 	c.Pid = p.cmd.Process.Pid
 
-	// Set cgroup before init process running.
+	// Set cgroup before init process.
 	if err := p.cgroup(c); err != nil {
 		log.Println(err)
 		return p.failToWait(c)

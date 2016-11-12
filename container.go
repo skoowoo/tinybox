@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"syscall"
 )
@@ -56,9 +57,14 @@ func NewContainer() (*Container, error) {
 		return nil, err
 	}
 
+	home := os.Getenv("TINYBOX_HOME")
+	if !path.IsAbs(home) {
+		return nil, fmt.Errorf("Not found TINYBOX_HOME environment var")
+	}
+
 	c := new(Container)
 	c.Name = opt.name
-	c.Dir = filepath.Join("/var/run/tinybox", c.Name)
+	c.Dir = filepath.Join(home, c.Name)
 	c.isExec = opt.IsExec()
 	c.CgPrefix = "tinybox"
 
