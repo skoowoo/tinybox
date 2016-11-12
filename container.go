@@ -143,6 +143,10 @@ func (c *Container) SetByType(typ string) error {
 	return nil
 }
 
+func (c *Container) IsExec() bool {
+	return c.isExec
+}
+
 func (c *Container) WaitJson() error {
 	return c.readPipe()
 }

@@ -57,7 +57,7 @@ func (p *masterProcess) eStart(c *Container) error {
 	}
 
 	cmd := &exec.Cmd{
-		Dir:    "/tmp",
+		Dir:    "/",
 		Path:   "/proc/self/exe",
 		Args:   []string{"setns", c.Name},
 		Stdout: os.Stdout,
@@ -117,7 +117,7 @@ func (p *masterProcess) eStart(c *Container) error {
 }
 
 func (p *masterProcess) Start(c *Container) error {
-	if c.isExec {
+	if c.IsExec() {
 		return p.eStart(c)
 	}
 

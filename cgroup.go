@@ -2,8 +2,10 @@ package tinybox
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -209,9 +211,66 @@ func (cg *CGroup) CpuSet(c *Container) error {
 		return err
 	}
 
-	// if err := WriteFileInt(filepath.Join(group, "cgroup.procs"), c.Pid); err != nil {
-	//	return err
-	//}
+	isEmpty := func(file string) ([]byte, bool, error) {
+		b, err := ioutil.ReadFile(file)
+		if err != nil {
+			if err != io.EOF {
+				return nil, false, err
+			}
+		}
+		if len(bytes.Trim(b, " \n\r\t")) == 0 {
+			return nil, true, nil
+		}
+		return b, false, nil
+	}
+
+	var tmpFiles []string
+	dir := group
+	for {
+		filename := filepath.Join(dir, "cpuset.cpus")
+		bs, empty, err := isEmpty(filename)
+		if err != nil {
+			return err
+		}
+
+		if !empty {
+			for i := len(tmpFiles); i > 0; i-- {
+				if err := ioutil.WriteFile(tmpFiles[i-1], bs, 0); err != nil {
+					return err
+				}
+			}
+			break
+		}
+
+		tmpFiles = append(tmpFiles, filename)
+		dir = filepath.Dir(dir)
+	}
+
+	tmpFiles = tmpFiles[0:0]
+	dir = group
+	for {
+		filename := filepath.Join(dir, "cpuset.mems")
+		bs, empty, err := isEmpty(filename)
+		if err != nil {
+			return err
+		}
+
+		if !empty {
+			for i := len(tmpFiles); i > 0; i-- {
+				if err := ioutil.WriteFile(tmpFiles[i-1], bs, 0); err != nil {
+					return err
+				}
+			}
+			break
+		}
+
+		tmpFiles = append(tmpFiles, filename)
+		dir = filepath.Dir(dir)
+	}
+
+	if err := WriteFileInt(filepath.Join(group, "cgroup.procs"), c.Pid); err != nil {
+		return err
+	}
 
 	cg.paths[subsysCS] = group
 	return setters.Write(subsysCS, group, &c.CgOpts)
