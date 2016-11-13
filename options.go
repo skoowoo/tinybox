@@ -27,6 +27,7 @@ type Options struct {
 	root     string
 	wd       string
 	hostname string
+	cgopts   CGroupOptions
 }
 
 func (o *Options) register() {
@@ -35,10 +36,19 @@ func (o *Options) register() {
 	flag.StringVar(&o.root, "root", "", "Container rootfs path")
 	flag.StringVar(&o.wd, "wd", "/", "Container working directory")
 	flag.StringVar(&o.hostname, "hostname", "", "Container host name")
+
+	// cgroup options
+	flag.StringVar(&o.cgopts.CpuShares, "cpu-shares", "0", "")
+	flag.StringVar(&o.cgopts.CpuCfsPeriod, "cpu-cfs-period", "0", "")
+	flag.StringVar(&o.cgopts.CpuCfsquota, "cpu-cfs-quota", "0", "")
+	flag.StringVar(&o.cgopts.CpusetCpus, "cpuset-cpus", "", "")
+	flag.StringVar(&o.cgopts.CpusetMems, "cpuset-mems", "", "")
 }
 
 func (o *Options) Parse() error {
 	if len(os.Args) < 2 {
+		o.register()
+		flag.Usage()
 		return ErrOptInvalid
 	}
 

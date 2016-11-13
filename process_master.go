@@ -121,16 +121,16 @@ func (p *masterProcess) Start(c *Container) error {
 		return p.eStart(c)
 	}
 
+	p.wg.Add(1)
 	go func() {
-		p.wg.Add(1)
 		defer p.wg.Done()
 
 		p.signals()
 		log.Println("Signal loop exited")
 	}()
 
+	p.wg.Add(1)
 	go func() {
-		p.wg.Add(1)
 		defer p.wg.Done()
 
 		p.events(c)

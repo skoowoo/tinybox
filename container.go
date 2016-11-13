@@ -34,12 +34,12 @@ type Container struct {
 	Name string `json:"name"` // container's name
 	Dir  string `json:"dir"`
 
-	Rootfs   string        `json:"rootfs"`
-	Path     string        `json:"path"` // the binary path of the first process.
-	Argv     []string      `json:"argv"`
-	Hostname string        `json:"hostname"`
-	CgPrefix string        `json:"cgprefix"`
-	CgOpts   CGroupOptions `json:"cgopts"`
+	Rootfs   string         `json:"rootfs"`
+	Path     string         `json:"path"` // the binary path of the first process.
+	Argv     []string       `json:"argv"`
+	Hostname string         `json:"hostname"`
+	CgPrefix string         `json:"cgprefix"`
+	CgOpts   *CGroupOptions `json:"cgopts"`
 
 	Pid int `json:"pid"` // process id of the init process
 
@@ -67,6 +67,7 @@ func NewContainer() (*Container, error) {
 	c.Dir = filepath.Join(home, c.Name)
 	c.isExec = opt.IsExec()
 	c.CgPrefix = "tinybox"
+	c.CgOpts = &opt.cgopts
 
 	if err := MkdirIfNotExist(c.Dir); err != nil {
 		return nil, err

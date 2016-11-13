@@ -1,20 +1,19 @@
 package tinybox
 
 func init() {
-	registerSetter(&defaultMemSet{})
+	registerSetter(&defaultMem{})
 }
 
-type defaultMemSet struct {
-}
+type defaultMem struct{}
 
-func (s defaultMemSet) IsSubsys(typ string) bool {
+func (d defaultMem) IsSubsys(typ string) bool {
 	return typ == subsysMEM
 }
 
-func (s defaultMemSet) Validate(opt *CGroupOptions) error {
+func (d defaultMem) Validate(opt *CGroupOptions) error {
 	return nil
 }
 
-func (s defaultMemSet) Write(opt *CGroupOptions, dir string) error {
+func (d defaultMem) Write(opt *CGroupOptions, dir string) error {
 	return nil
 }

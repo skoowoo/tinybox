@@ -42,3 +42,9 @@ func WriteFileInt(file string, v int) error {
 func WriteFileStr(file string, v string) error {
 	return ioutil.WriteFile(file, []byte(v), 0644)
 }
+
+func WriteFileWithPanic(file string, v string) {
+	if err := ioutil.WriteFile(file, []byte(v), 0); err != nil {
+		panic(err)
+	}
+}
